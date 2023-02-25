@@ -15,9 +15,8 @@ public class MergeRequestVersionClient : IMergeRequestVersionClient
 
     public MergeRequestVersionClient(API api, string projectPath, int mergeRequestIid)
     {
-        var iid = mergeRequestIid.ToString(CultureInfo.InvariantCulture);
         _api = api;
-        _versionsPath = projectPath + "/merge_requests/" + iid + "/versions";
+        _versionsPath = projectPath + "/merge_requests/" + mergeRequestIid.ToString(CultureInfo.InvariantCulture) + "/versions";
     }
 
     public IEnumerable<MergeRequestVersion> All()

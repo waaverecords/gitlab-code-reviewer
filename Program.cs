@@ -1,6 +1,6 @@
 using CustomNGitLab;
 using Newtonsoft.Json.Linq;
-using NGitLab.Models;
+using System.Text.RegularExpressions;
 
 var builder = WebApplication.CreateBuilder(args);
 var gitLabSettings = builder.Configuration.GetSection("GitLab").Get<GitLabSettings>();
@@ -37,13 +37,43 @@ app.MapPost("/gitlab-webhook", async context =>
     var mrVersionClient = mrClient.Versions(mergeRequestId);
     var mrDiscussionClient = mrClient.Discussions(mergeRequestId);
 
-    var versions = mrVersionClient.All();
-    var changes = mrChangeClient.MergeRequestChange.Changes;
-    
-    var discussion = mrDiscussionClient.Add(new MergeRequestDiscussionCreate
+    var mrVersion = mrVersionClient.All().First();
+    var mrChanges = mrChangeClient.MergeRequestChange.Changes;
+
+    foreach (var change in mrChanges)
     {
-        Body = "test"
-    });
+        Console.WriteLine(change.Diff);
+
+        var hunkPattern = @"^@@ -\d+(?:,\d+)? \+(\d)(?:,(\d+))? @@";
+        var matches = Regex.Matches(change.Diff, hunkPattern, RegexOptions.Multiline);
+        var last = matches.ToList().Last();
+        var modifiedStart = int.Parse(last.Groups[1].Value);
+        var modifiedLineCount = string.IsNullOrEmpty(last.Groups[2].Value) ? 1 : int.Parse(last.Groups[2].Value);
+
+        Console.WriteLine(modifiedStart);
+        Console.WriteLine(modifiedLineCount);
+
+        using var httpClient = new HttpClient();
+        httpClient.DefaultRequestHeaders.Add("PRIVATE-TOKEN", gitLabSettings.ImpersonationToken);
+
+        using var form = new MultipartFormDataContent();
+        form.Add(new StringContent("text"), "position[position_type]");
+        form.Add(new StringContent(mrVersion.BaseCommitSha), "position[base_sha]");
+        form.Add(new StringContent(mrVersion.HeadCommitSha), "position[head_sha]");
+        form.Add(new StringContent(mrVersion.StartCommitSha), "position[start_sha]");
+        form.Add(new StringContent(change.NewPath), "position[new_path]");
+        form.Add(new StringContent(change.OldPath), "position[old_path]");
+        form.Add(new StringContent(modifiedStart.ToString()), "position[new_line]");
+        form.Add(new StringContent("test"), "body");
+
+        // see https://docs.gitlab.com/ee/api/discussions.html#create-a-new-thread-in-the-merge-request-diff
+        // for commenting on an old, new or unchanged line
+
+        using var response = await httpClient.PostAsync(
+            new Uri(new Uri(gitLabSettings.Url), $"api/v4/projects/{projectId}/merge_requests/{mergeRequestId}/discussions"),
+            form
+        );
+    };
 
     context.Response.StatusCode = StatusCodes.Status200OK;
 });
