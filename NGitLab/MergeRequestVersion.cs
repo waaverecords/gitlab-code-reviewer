@@ -4,6 +4,9 @@ namespace NGitLab.Models;
 
 public class MergeRequestVersion
 {
+    [JsonPropertyName("id")]
+    public int Id { get; set; }
+
     [JsonPropertyName("head_commit_sha")]
     public string HeadCommitSha { get; set; }
 
@@ -23,5 +26,5 @@ public class MergeRequestVersion
     public string State { get; set; }
 
     [JsonPropertyName("real_size")]
-    public long RealSize { get; set; }
+    public string RealSize { get; set; }
 }
