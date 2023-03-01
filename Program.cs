@@ -1,5 +1,5 @@
-using CustomNGitLab;
 using Newtonsoft.Json.Linq;
+using NGitLab;
 using System.Text.RegularExpressions;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -30,14 +30,13 @@ app.MapPost("/gitlab-webhook", async context =>
     var projectId = (int)data.project.id;
     var mergeRequestId = (int)data.object_attributes.id;
     
-    var gitlab = new CustomGitLabClient(gitLabSettings.Url, gitLabSettings.ImpersonationToken);
+    var gitlab = new GitLabClient(gitLabSettings.Url, gitLabSettings.ImpersonationToken);
 
     var mrClient = gitlab.GetMergeRequest(projectId);
     var mrChangeClient = mrClient.Changes(mergeRequestId);
-    var mrVersionClient = mrClient.Versions(mergeRequestId);
     var mrDiscussionClient = mrClient.Discussions(mergeRequestId);
 
-    var mrVersion = mrVersionClient.All().First();
+    var mrVersion = mrClient.GetVersionsAsync(mergeRequestId).First();
     var mrChanges = mrChangeClient.MergeRequestChange.Changes;
 
     foreach (var change in mrChanges)
@@ -46,12 +45,9 @@ app.MapPost("/gitlab-webhook", async context =>
 
         var hunkPattern = @"^@@ -\d+(?:,\d+)? \+(\d)(?:,(\d+))? @@";
         var matches = Regex.Matches(change.Diff, hunkPattern, RegexOptions.Multiline);
-        var last = matches.ToList().Last();
-        var modifiedStart = int.Parse(last.Groups[1].Value);
-        var modifiedLineCount = string.IsNullOrEmpty(last.Groups[2].Value) ? 1 : int.Parse(last.Groups[2].Value);
-
-        Console.WriteLine(modifiedStart);
-        Console.WriteLine(modifiedLineCount);
+        // var last = matches.ToList().Last();
+        // var modifiedStart = int.Parse(last.Groups[1].Value);
+        // var modifiedLineCount = string.IsNullOrEmpty(last.Groups[2].Value) ? 1 : int.Parse(last.Groups[2].Value);
 
         using var httpClient = new HttpClient();
         httpClient.DefaultRequestHeaders.Add("PRIVATE-TOKEN", gitLabSettings.ImpersonationToken);
@@ -63,7 +59,7 @@ app.MapPost("/gitlab-webhook", async context =>
         form.Add(new StringContent(mrVersion.StartCommitSha), "position[start_sha]");
         form.Add(new StringContent(change.NewPath), "position[new_path]");
         form.Add(new StringContent(change.OldPath), "position[old_path]");
-        form.Add(new StringContent(modifiedStart.ToString()), "position[new_line]");
+        form.Add(new StringContent((1).ToString()), "position[new_line]");
         form.Add(new StringContent("test"), "body");
 
         // see https://docs.gitlab.com/ee/api/discussions.html#create-a-new-thread-in-the-merge-request-diff
